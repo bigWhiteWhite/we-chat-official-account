@@ -1,0 +1,12 @@
+allowBuilds:
+  "@prisma/engines": true
+  esbuild: true
+  prisma: true
+minimumReleaseAgeExclude:
+  - "@ai-sdk/gateway@3.0.196"
+  - "@ai-sdk/openai@4.0.69"
+  - "@ai-sdk/provider-utils@5.0.43"
+  - "@ai-sdk/provider@4.0.17"
+  - "@tanstack/query-core@5.103.1"
+  - "@tanstack/react-query@5.103.1"
+  - "ai@6.0.285"

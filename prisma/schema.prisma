@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Topic {
+  id        Int      @id @default(autoincrement())
+  text      String
+  source    String
+  sourceUrl String?
+  heat      Int      @default(0)
+  hash      String   @unique
+  usedAt    DateTime @default(now())
+}
+
+model Task {
+  taskId         String   @id @default(cuid())
+  status         String   @default("collecting")
+  /** 漫画布局：wide 横版漫画图 / tall 竖版长图 */
+  layout          String   @default("wide")
+  sourceType     String
+  outlineText    String?
+  seriesId       String?
+  episodeNo      Int?
+  episodeDigest  String?
+  carryContext   Boolean  @default(false)
+  /** 本集出场角色资产 id（JSON 数组，合集连载用；空=全部主角出场） */
+  castIdsJson    String?
+  /** 本集画风资产 id（合集多画风时创作流程选择；空=合集第一个画风） */
+  styleAssetId   String?
+  title              String?
+  referencePathsJson String?
+  subjectBindingsJson String?
+  subjectPromptOverridesJson String?
+  scriptJson     String?
+  imagePathsJson String?
+  reviewResult   String?
+  reviewNote     String?
+  draftMediaId   String?
+  publishId      String?
+  costLlmUsd     Float    @default(0)
+  imageCnt       Int      @default(0)
+  retryCount     Int      @default(0)
+  error          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  events         TaskEvent[]
+  reviewLogs     ReviewLog[]
+  publishRecord  PublishRecord?
+  series         Series?  @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  seriesLinks    TaskSeriesLink[]
+  tags           TaskTag[]
+
+  @@index([status])
+}
+
+model Series {
+  id             String   @id @default(cuid())
+  name           String
+  intro          String   @default("")
+  coverPath      String?
+  status         String   @default("ongoing")
+  /** 展示顺序（拖拽排序） */
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tasks          Task[]
+  taskLinks      TaskSeriesLink[]
+  links          AssetSeriesLink[]
+  tags           SeriesTag[]
+
+  @@index([status])
+}
+
+/// 内容标签：名称 + 描述（描述即 LLM 的「行为说明书」，注入选题/剧本 prompt），替代旧题材方向/类别
+model Tag {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks  TaskTag[]
+  series SeriesTag[]
+}
+
+/// 任务-标签多对多
+model TaskTag {
+  taskId String
+  tagId  String
+
+  task Task @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, tagId])
+  @@index([tagId])
+}
+
+/// 合集-标签多对多（新建剧集时默认带入）
+model SeriesTag {
+  seriesId String
+  tagId    String
+
+  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([seriesId, tagId])
+  @@index([tagId])
+}
+
+/// 任务-合集多对多归属：主合集仍由 Task.seriesId 决定（集数/上下文/主体锁定），其余为附加归属
+model TaskSeriesLink {
+  taskId   String
+  seriesId String
+
+  task   Task   @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
+  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, seriesId])
+  @@index([seriesId])
+}
+
+/// 资产-合集多对多关联：同一资产可归入多个合集；role 决定其在合集中的角色
+model AssetSeriesLink {
+  assetId  String
+  seriesId String
+  role     String @default("member") // protagonist 主角(锁定) / scene 常设场景 / style 画风(锁定) / member 普通成员(仅归档)
+
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  series Series @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, seriesId])
+  @@index([seriesId])
+}
+
+model TaskEvent {
+  id          Int      @id @default(autoincrement())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
+  stage       String
+  eventType   String
+  message     String   @default("")
+  payloadJson String?
+  createdAt   DateTime @default(now())
+
+  @@index([taskId, createdAt])
+}
+
+model ReviewLog {
+  id          Int      @id @default(autoincrement())
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
+  action      String
+  reviewer    String   @default("human")
+  costSeconds Float    @default(0)
+  createdAt   DateTime @default(now())
+}
+
+model PublishRecord {
+  id           Int      @id @default(autoincrement())
+  taskId       String   @unique
+  task         Task     @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
+  draftMediaId String
+  title        String
+  source       String
+  createdAt    DateTime @default(now())
+}
+
+model TokenCache {
+  key         String   @id
+  accessToken String
+  expiresAt   DateTime
+}
+
+model Asset {
+  id             String   @id @default(cuid())
+  type           String
+  name           String
+  imagePrompt    String   @default("") @map("summary")
+  keywords       String   @default("")
+  imagePathsJson String   @default("[]")
+  outfitsJson    String   @default("[]")
+  /** 画风变体（JSON: [{styleId,styleName,appearance,image}]；角色/场景在指定画风下的参考图） */
+  styleVariantsJson String @default("[]")
+  /** 形象变体（JSON: [{id,name,styleId,styleName,appearance,image}]；角色/场景的多个形象，首项为主形象） */
+  variantsJson String @default("[]")
+  /** 人物设定（角色资产专用，供剧本 AI 参考） */
+  characterProfile String @default("")
+  /** 性格（角色资产专用） */
+  personality      String @default("")
+  /** 专属小特点（角色资产专用） */
+  traits           String @default("")
+  stylePreset    String?
+  sourceTaskId   String?
+  usageCount     Int      @default(0)
+  /** 展示顺序（拖拽排序） */
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  links AssetSeriesLink[]
+
+  @@index([type])
+  @@index([createdAt])
+}
+
+/// 应用设置（模型配置前端化）：key 见 src/lib/settings-store.ts MODEL_SETTING_ENV_KEYS
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

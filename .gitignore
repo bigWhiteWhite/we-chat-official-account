@@ -1,0 +1,23 @@
+node_modules/
+.next/
+.env
+.env.local
+*.tsbuildinfo
+*.db
+*.db-journal
+data/
+inbox/
+comics/
+generated/
+.access_token.json
+.idea/
+npm-cache/
+.pnpm-store/
+next-env.d.ts
+.tmp/
+.superpowers
+docs/
+# AI 编辑器本地 skill 包（第三方内容，不属于项目源码）
+.agents/
+.claude/
+skills-lock.json
